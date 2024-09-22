@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Application</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+        }
+
+        h1 {
+            text-align: center;
+            color: #555;
+        }
+
+        #nameForm {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            display: block;
+        }
+
+        #nameForm input {
+            padding: 12px 15px;
+            width: 300px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+
+        #nameForm input:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 10px rgba(0, 123, 255, 0.2);
+        }
+
+        #nameForm button {
+            padding: 12px 20px;
+            background-color: #007bff;
+            border: none;
+            color: white;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        #nameForm button:hover {
+            background-color: #0056b3;
+        }
+
+        #chat {
+            display: flex;
+            flex-direction: column;
+            height: 90vh;
+            width: 80vh;
+            word-wrap: break-word;
+        }
+
+        #messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 10px;
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+            background-color: #fff;
+        }
+
+        #inputArea {
+            display: flex;
+            padding: 10px;
+            background-color: #fff;
+            /* border-top: 1px solid #ccc; */
+        }
+
+        #message {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+
+        #sendButton {
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        #sendButton:hover {
+            background-color: #0056b3;
+        }
+
+        .server-message {
+            text-align: center;
+            color: #888;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Welcome to Dev Cỏ's chat group!</h1>
+    <div>
+        <div id="nameForm">
+            <input id="name" type="text" placeholder="Enter your name" />
+            <button onclick="submitName()">Submit</button>
+        </div>
+
+        <div id="chat" style="display:none;">
+            <div id="messages"></div>
+            <div id="inputArea">
+                <input id="message" type="text" placeholder="Type a message" />
+                <button id="sendButton" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Handshake với WebSocket server
+         */
+        const ws = new WebSocket('ws://localhost:8080');
+        let userName = '';
+
+        ws.onopen = () => {
+            console.log('Connected to server');
+        };
+
+        function submitName() {
+            userName = document.getElementById('name').value;
+            // #1: Gửi tên client sau khi submit form lên cho server
+            ws.send(JSON.stringify({ type: 'setName', name: userName }));
+        }
+
+        function sendMessage() {
+            const message = document.getElementById('message').value;
+            if (message.trim() !== '') {
+                // #3: Gửi nội dung tin nhắn của client cho server 
+                ws.send(JSON.stringify({ type: 'chat', text: message }));
+                document.getElementById('message').value = '';
+            }
+        }
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            console.log('Received from server:', data);
+
+            // #1.1: Hiển thị lỗi nếu tên đã tồn tại
+            if (data.type === 'error') {
+                alert(data.message);
+            }
+
+            // #1.2: Kết nối thành công và đóng form nhập tên
+            if (data.type === 'success') {
+                document.getElementById('nameForm').style.display = 'none';
+                document.getElementById('chat').style.display = 'block';
+            }
+
+            // #2 + #5: Nhận message thông báo người dùng mới join và hiển thị chào mừng lên màn hình
+            if (data.type === 'serverMessage') {
+                let messageToShow = data.message;
+                if (data.name) {
+                    messageToShow = data.name === userName ? `You ${data.message}` : `${data.name} ${data.message}`;
+                }
+                document.getElementById('messages').innerHTML += `<p class="server-message">${messageToShow}</p>`;
+                scrollToBottom();
+            }
+
+            // #4: Các client nhận nội dung tin nhắn và hiển thị lên màn hình
+            if (data.type === 'chat') {
+                const displayName = data.sender === userName ? 'You' : data.sender;
+                document.getElementById('messages').innerHTML += `<p><strong>${displayName}:</strong> ${data.message}</p>`;
+                scrollToBottom();
+            }
+        };
+
+        // Bắt sự kiện nhấn Enter để gửi tin nhắn
+        document.getElementById('message').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Bắt sự kiện nhấn Enter để submit tên
+        document.getElementById('name').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                submitName();
+            }
+        });
+
+        // Scroll để luôn thấy tin nhắn mới nhất
+        function scrollToBottom() {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+    </script>
+</body>
+
+</html>
